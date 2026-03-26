@@ -1,0 +1,6 @@
+[Unit]
+Description=Cache weather data
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/weather-cache

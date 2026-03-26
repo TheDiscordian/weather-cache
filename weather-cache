@@ -1,0 +1,163 @@
+#!/bin/bash
+# Fetch and cache weather data using Open-Meteo, wttr.in (fallback), and Environment Canada alerts
+# Configuration is loaded from weather-cache.conf
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONF_FILE="${WEATHER_CACHE_CONF:-$HOME/.config/weather-cache/weather-cache.conf}"
+
+if [ ! -f "$CONF_FILE" ]; then
+    echo "Config not found: $CONF_FILE"
+    echo "Copy weather-cache.conf.example to $CONF_FILE and edit it."
+    exit 1
+fi
+
+source "$CONF_FILE"
+
+# Validate required config
+if [ -z "$LATITUDE" ] || [ -z "$LONGITUDE" ] || [ -z "$LOCATION_NAME" ]; then
+    echo "Error: LATITUDE, LONGITUDE, and LOCATION_NAME must be set in $CONF_FILE"
+    exit 1
+fi
+
+CACHE_DIR="${CACHE_DIR:-$HOME/.cache/weather}"
+LOGFILE="$CACHE_DIR/weather-cache.log"
+mkdir -p "$CACHE_DIR"
+
+log_error() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') ERROR: $1" >> "$LOGFILE"
+}
+
+# Keep log file from growing forever (trim to last 500 lines)
+if [ -f "$LOGFILE" ] && [ "$(wc -l < "$LOGFILE")" -gt 1000 ]; then
+    tail -500 "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
+fi
+
+CONDITIONS_UPDATED=false
+
+# Primary: Open-Meteo
+TIMEZONE="${TIMEZONE:-$(cat /etc/timezone 2>/dev/null || echo "UTC")}"
+RAW_OPENMETEO=$(curl -sf --max-time 15 "https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=$(echo "$TIMEZONE" | sed 's|/|%2F|g')&forecast_days=3" 2>/dev/null)
+if [ -n "$RAW_OPENMETEO" ]; then
+    PARSED=$(echo "$RAW_OPENMETEO" | python3 -c "
+import sys, json
+WMO = {0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Freezing fog',
+51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Heavy freezing drizzle',
+61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Heavy freezing rain',
+71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',
+80:'Light showers',81:'Showers',82:'Heavy showers',85:'Light snow showers',86:'Heavy snow showers',
+95:'Thunderstorm',96:'Thunderstorm with hail',99:'Thunderstorm with heavy hail'}
+DIRS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
+try:
+    d = json.load(sys.stdin)
+    c = d['current']
+    temp = round(c['temperature_2m'])
+    feels = round(c['apparent_temperature'])
+    condition = WMO.get(c['weather_code'], 'Unknown')
+    wind = round(c['wind_speed_10m'])
+    wind_dir = DIRS[round(c['wind_direction_10m'] / 22.5) % 16]
+    humidity = c['relative_humidity_2m']
+    out = []
+    out.append(f\"Updated: $(date '+%Y-%m-%d %H:%M')\")
+    out.append(f'Current: {temp}°, feels like {feels}°')
+    out.append(f'Condition: {condition}')
+    out.append(f'Wind: {wind} km/h {wind_dir}')
+    out.append(f'Humidity: {humidity}%')
+    out.append('')
+    out.append('Forecast:')
+    for i in range(3):
+        date = d['daily']['time'][i]
+        lo = round(d['daily']['temperature_2m_min'][i])
+        hi = round(d['daily']['temperature_2m_max'][i])
+        desc = WMO.get(d['daily']['weather_code'][i], 'Unknown')
+        out.append(f'  {date}: {lo}° to {hi}°, {desc}')
+    print('\n'.join(out))
+except Exception as e:
+    print(f'PARSE_ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>&1)
+    if [ $? -eq 0 ] && [ -n "$PARSED" ]; then
+        echo "$PARSED" > "$CACHE_DIR/conditions.txt"
+        CONDITIONS_UPDATED=true
+    else
+        log_error "conditions: failed to parse Open-Meteo response: $PARSED"
+    fi
+else
+    log_error "conditions: curl failed to reach Open-Meteo"
+fi
+
+# Fallback: wttr.in (only if Open-Meteo failed)
+if [ "$CONDITIONS_UPDATED" = "false" ]; then
+    WTTR_LOCATION=$(echo "$LOCATION_NAME" | sed 's/ /+/g')
+    RAW_CONDITIONS=$(curl -sf --max-time 15 "wttr.in/${WTTR_LOCATION}?format=j1" 2>/dev/null)
+    if [ -n "$RAW_CONDITIONS" ]; then
+        PARSED=$(echo "$RAW_CONDITIONS" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    if 'data' in d:
+        d = d['data']
+    c = d['current_condition'][0]
+    out = []
+    out.append(f\"Updated: $(date '+%Y-%m-%d %H:%M')\")
+    out.append(f\"Current: {c['temp_C']}°, feels like {c['FeelsLikeC']}°\")
+    out.append(f\"Condition: {c['weatherDesc'][0]['value']}\")
+    out.append(f\"Wind: {c['windspeedKmph']} km/h {c['winddir16Point']}\")
+    out.append(f\"Humidity: {c['humidity']}%\")
+    out.append('')
+    out.append('Forecast:')
+    for day in d['weather'][:3]:
+        desc = day['hourly'][4]['weatherDesc'][0]['value']
+        out.append(f\"  {day['date']}: {day['mintempC']}° to {day['maxtempC']}°, {desc}\")
+    print('\n'.join(out))
+except Exception as e:
+    print(f'PARSE_ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>&1)
+        if [ $? -eq 0 ] && [ -n "$PARSED" ]; then
+            echo "$PARSED" > "$CACHE_DIR/conditions.txt"
+        else
+            log_error "conditions: failed to parse wttr.in response: $PARSED"
+        fi
+    else
+        log_error "conditions: fallback curl failed to reach wttr.in"
+    fi
+fi
+
+# Weather alerts (Environment Canada — optional, only if ALERT_BBOX is set)
+if [ -n "$ALERT_BBOX" ]; then
+    ALERT_FILTER="${ALERT_FILTER:-$LOCATION_NAME}"
+    RAW_ALERTS=$(curl -sf --max-time 120 "https://api.weather.gc.ca/collections/weather-alerts/items?lang=en&limit=10&bbox=${ALERT_BBOX}" 2>/dev/null)
+    if [ -n "$RAW_ALERTS" ]; then
+        PARSED=$(echo "$RAW_ALERTS" | python3 -c "
+import sys, json, os
+try:
+    d = json.load(sys.stdin)
+    features = d.get('features', [])
+    alert_filter = os.environ.get('ALERT_FILTER', '')
+    if alert_filter:
+        filtered = [f for f in features if alert_filter in f['properties'].get('feature_name_en', '')]
+    else:
+        filtered = features
+    if not filtered:
+        print(f'No active weather alerts.')
+    else:
+        for f in filtered:
+            p = f['properties']
+            print(f\"[{p.get('alert_type','').upper()}] {p.get('alert_name_en','Unknown')}\")
+            print(f\"Area: {p.get('feature_name_en','')}\")
+            print(f\"Expires: {p.get('expiration_datetime','')}\")
+            print(p.get('alert_text_en',''))
+            print('---')
+except Exception as e:
+    print(f'PARSE_ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>&1)
+        if [ $? -eq 0 ] && [ -n "$PARSED" ]; then
+            echo "$PARSED" > "$CACHE_DIR/alerts.txt"
+        else
+            log_error "alerts: failed to parse Environment Canada response: $PARSED"
+        fi
+    else
+        log_error "alerts: curl failed to reach api.weather.gc.ca"
+    fi
+fi

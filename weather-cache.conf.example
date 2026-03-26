@@ -1,0 +1,23 @@
+# weather-cache configuration
+# Copy this file to ~/.config/weather-cache/weather-cache.conf and edit it.
+
+# Required: your location coordinates (used by Open-Meteo)
+LATITUDE="43.65"
+LONGITUDE="-79.38"
+
+# Required: location name (used by wttr.in fallback)
+LOCATION_NAME="Toronto Ontario"
+
+# Optional: timezone (auto-detected from /etc/timezone if not set)
+# TIMEZONE="America/Toronto"
+
+# Optional: cache directory (default: ~/.cache/weather)
+# CACHE_DIR="$HOME/.cache/weather"
+
+# Optional: Environment Canada alerts bounding box (lon_min,lat_min,lon_max,lat_max)
+# Only needed if you want weather alerts. Find your bounding box at:
+# https://api.weather.gc.ca/collections/weather-alerts/items?lang=en&limit=1
+# ALERT_BBOX="-79.6,43.5,-79.2,43.8"
+
+# Optional: filter alerts by area name (defaults to LOCATION_NAME)
+# ALERT_FILTER="Toronto"

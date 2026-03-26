@@ -1,0 +1,55 @@
+#!/bin/bash
+# Output weather for waybar custom module (JSON format)
+# Reads from weather-cache's cached data
+
+CACHE="${WEATHER_CACHE_DIR:-$HOME/.cache/weather}/conditions.txt"
+ALERTS="${WEATHER_CACHE_DIR:-$HOME/.cache/weather}/alerts.txt"
+
+if [ ! -f "$CACHE" ]; then
+    echo '{"text": "N/A", "tooltip": "No weather data"}'
+    exit 0
+fi
+
+# Parse cached conditions
+TEMP=$(grep "^Current:" "$CACHE" | grep -oP -- '-?\d+' | head -1)
+CONDITION=$(grep "^Condition:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
+FEELS=$(grep "^Current:" "$CACHE" | grep -oP 'feels like \K[-\d]+')
+WIND=$(grep "^Wind:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
+HUMIDITY=$(grep "^Humidity:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
+FORECAST=$(grep "^  " "$CACHE" | tr '\n' '\n')
+
+# Map condition to emoji
+case "${CONDITION,,}" in
+    *thunder*)  ICON="⛈️" ;;
+    *snow*|*blizzard*|*squall*) ICON="🌨️" ;;
+    *rain*|*drizzle*|*shower*) ICON="🌧️" ;;
+    *cloud*|*overcast*) ICON="☁️" ;;
+    *partly*|*few*) ICON="⛅" ;;
+    *fog*|*mist*|*haze*) ICON="🌫️" ;;
+    *clear*|*sunny*) ICON="☀️" ;;
+    *wind*|*blow*) ICON="💨" ;;
+    *) ICON="🌡️" ;;
+esac
+
+# Last updated time
+UPDATED=$(grep "^Updated:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
+
+# Build tooltip
+TOOLTIP="Feels like: ${FEELS}°C\nWind: ${WIND}\nHumidity: ${HUMIDITY}\n\n${FORECAST}"
+
+# Add alerts to tooltip
+if [ -f "$ALERTS" ] && ! grep -q "No active" "$ALERTS"; then
+    ALERT_HEADER=$(grep "^\[" "$ALERTS" | sed 's/\[/⚠️ [/')
+    ALERT_WHAT=$(sed -n '/^What:/{n;/^$/d;p;}' "$ALERTS" | head -1)
+    ALERT_WHEN=$(sed -n '/^When:/{n;/^$/d;p;}' "$ALERTS" | head -1)
+    ALERT_DETAIL="  ❓ ${ALERT_WHAT}\n  🕐 ${ALERT_WHEN}"
+    TOOLTIP="${TOOLTIP}\n\n${ALERT_HEADER}\n${ALERT_DETAIL}"
+    ICON="⚠️${ICON}"
+fi
+
+TOOLTIP="${TOOLTIP}\n\nUpdated:${UPDATED}"
+
+# Escape for JSON
+TOOLTIP=$(echo -e "$TOOLTIP" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+echo "{\"text\": \"${ICON} ${TEMP}°C\", \"tooltip\": \"${TOOLTIP}\"}"
