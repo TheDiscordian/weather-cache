@@ -14,6 +14,8 @@ fi
 TEMP=$(grep "^Current:" "$CACHE" | grep -oP -- '-?\d+' | head -1)
 CONDITION=$(grep "^Condition:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
 FEELS=$(grep "^Current:" "$CACHE" | grep -oP 'feels like \K[-\d]+')
+UNIT=$(grep "^Current:" "$CACHE" | grep -oP '°[CF]' | head -1)
+UNIT="${UNIT:-°C}"
 WIND=$(grep "^Wind:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
 HUMIDITY=$(grep "^Humidity:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
 FORECAST=$(grep "^  " "$CACHE" | tr '\n' '\n')
@@ -35,7 +37,7 @@ esac
 UPDATED=$(grep "^Updated:" "$CACHE" | cut -d: -f2- | sed 's/^ //')
 
 # Build tooltip
-TOOLTIP="Feels like: ${FEELS}°C\nWind: ${WIND}\nHumidity: ${HUMIDITY}\n\n${FORECAST}"
+TOOLTIP="Feels like: ${FEELS}${UNIT}\nWind: ${WIND}\nHumidity: ${HUMIDITY}\n\n${FORECAST}"
 
 # Add alerts to tooltip
 if [ -f "$ALERTS" ] && ! grep -q "No active" "$ALERTS"; then
@@ -52,4 +54,4 @@ TOOLTIP="${TOOLTIP}\n\nUpdated:${UPDATED}"
 # Escape for JSON
 TOOLTIP=$(echo -e "$TOOLTIP" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
-echo "{\"text\": \"${ICON} ${TEMP}°C\", \"tooltip\": \"${TOOLTIP}\"}"
+echo "{\"text\": \"${ICON} ${TEMP}${UNIT}\", \"tooltip\": \"${TOOLTIP}\"}"

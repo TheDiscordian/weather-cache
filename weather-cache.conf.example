@@ -8,6 +8,9 @@ LONGITUDE="-79.38"
 # Required: location name (used by wttr.in fallback)
 LOCATION_NAME="Toronto Ontario"
 
+# Optional: units — "metric" (°C, km/h) or "imperial" (°F, mph). Default: metric
+# UNITS="imperial"
+
 # Optional: timezone (auto-detected from /etc/timezone if not set)
 # TIMEZONE="America/Toronto"
 

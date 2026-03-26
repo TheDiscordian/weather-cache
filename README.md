@@ -46,6 +46,7 @@ Edit `~/.config/weather-cache/weather-cache.conf`:
 | `LATITUDE` | Yes | Location latitude (e.g. `43.65`) |
 | `LONGITUDE` | Yes | Location longitude (e.g. `-79.38`) |
 | `LOCATION_NAME` | Yes | City name for wttr.in fallback (e.g. `Toronto Ontario`) |
+| `UNITS` | No | `metric` (°C, km/h) or `imperial` (°F, mph). Default: `metric` |
 | `TIMEZONE` | No | Timezone (auto-detected from `/etc/timezone` if not set) |
 | `CACHE_DIR` | No | Cache directory (default: `~/.cache/weather`) |
 | `ALERT_BBOX` | No | Bounding box for Environment Canada alerts (`lon_min,lat_min,lon_max,lat_max`) |

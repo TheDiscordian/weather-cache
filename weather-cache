@@ -19,6 +19,7 @@ if [ -z "$LATITUDE" ] || [ -z "$LONGITUDE" ] || [ -z "$LOCATION_NAME" ]; then
     exit 1
 fi
 
+UNITS="${UNITS:-metric}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/weather}"
 LOGFILE="$CACHE_DIR/weather-cache.log"
 mkdir -p "$CACHE_DIR"
@@ -36,10 +37,14 @@ CONDITIONS_UPDATED=false
 
 # Primary: Open-Meteo
 TIMEZONE="${TIMEZONE:-$(cat /etc/timezone 2>/dev/null || echo "UTC")}"
-RAW_OPENMETEO=$(curl -sf --max-time 15 "https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=$(echo "$TIMEZONE" | sed 's|/|%2F|g')&forecast_days=3" 2>/dev/null)
+OPENMETEO_UNITS=""
+if [ "$UNITS" = "imperial" ]; then
+    OPENMETEO_UNITS="&temperature_unit=fahrenheit&wind_speed_unit=mph"
+fi
+RAW_OPENMETEO=$(curl -sf --max-time 15 "https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=$(echo "$TIMEZONE" | sed 's|/|%2F|g')&forecast_days=3${OPENMETEO_UNITS}" 2>/dev/null)
 if [ -n "$RAW_OPENMETEO" ]; then
-    PARSED=$(echo "$RAW_OPENMETEO" | python3 -c "
-import sys, json
+    PARSED=$(UNITS="$UNITS" echo "$RAW_OPENMETEO" | python3 -c "
+import sys, json, os
 WMO = {0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Freezing fog',
 51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Heavy freezing drizzle',
 61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Heavy freezing rain',
@@ -49,6 +54,9 @@ WMO = {0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Fr
 DIRS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
 try:
     d = json.load(sys.stdin)
+    imperial = os.environ.get('UNITS') == 'imperial'
+    deg = '°F' if imperial else '°C'
+    spd = 'mph' if imperial else 'km/h'
     c = d['current']
     temp = round(c['temperature_2m'])
     feels = round(c['apparent_temperature'])
@@ -58,9 +66,9 @@ try:
     humidity = c['relative_humidity_2m']
     out = []
     out.append(f\"Updated: $(date '+%Y-%m-%d %H:%M')\")
-    out.append(f'Current: {temp}°, feels like {feels}°')
+    out.append(f'Current: {temp}{deg}, feels like {feels}{deg}')
     out.append(f'Condition: {condition}')
-    out.append(f'Wind: {wind} km/h {wind_dir}')
+    out.append(f'Wind: {wind} {spd} {wind_dir}')
     out.append(f'Humidity: {humidity}%')
     out.append('')
     out.append('Forecast:')
@@ -69,7 +77,7 @@ try:
         lo = round(d['daily']['temperature_2m_min'][i])
         hi = round(d['daily']['temperature_2m_max'][i])
         desc = WMO.get(d['daily']['weather_code'][i], 'Unknown')
-        out.append(f'  {date}: {lo}° to {hi}°, {desc}')
+        out.append(f'  {date}: {lo}{deg} to {hi}{deg}, {desc}')
     print('\n'.join(out))
 except Exception as e:
     print(f'PARSE_ERROR: {e}', file=sys.stderr)
@@ -90,24 +98,32 @@ if [ "$CONDITIONS_UPDATED" = "false" ]; then
     WTTR_LOCATION=$(echo "$LOCATION_NAME" | sed 's/ /+/g')
     RAW_CONDITIONS=$(curl -sf --max-time 15 "wttr.in/${WTTR_LOCATION}?format=j1" 2>/dev/null)
     if [ -n "$RAW_CONDITIONS" ]; then
-        PARSED=$(echo "$RAW_CONDITIONS" | python3 -c "
-import sys, json
+        PARSED=$(UNITS="$UNITS" echo "$RAW_CONDITIONS" | python3 -c "
+import sys, json, os
 try:
     d = json.load(sys.stdin)
     if 'data' in d:
         d = d['data']
     c = d['current_condition'][0]
+    imperial = os.environ.get('UNITS') == 'imperial'
+    deg = '°F' if imperial else '°C'
+    spd = 'mph' if imperial else 'km/h'
+    temp = c['temp_F'] if imperial else c['temp_C']
+    feels = c['FeelsLikeF'] if imperial else c['FeelsLikeC']
+    wind = c['windspeedMiles'] if imperial else c['windspeedKmph']
     out = []
     out.append(f\"Updated: $(date '+%Y-%m-%d %H:%M')\")
-    out.append(f\"Current: {c['temp_C']}°, feels like {c['FeelsLikeC']}°\")
+    out.append(f\"Current: {temp}{deg}, feels like {feels}{deg}\")
     out.append(f\"Condition: {c['weatherDesc'][0]['value']}\")
-    out.append(f\"Wind: {c['windspeedKmph']} km/h {c['winddir16Point']}\")
+    out.append(f\"Wind: {wind} {spd} {c['winddir16Point']}\")
     out.append(f\"Humidity: {c['humidity']}%\")
     out.append('')
     out.append('Forecast:')
     for day in d['weather'][:3]:
         desc = day['hourly'][4]['weatherDesc'][0]['value']
-        out.append(f\"  {day['date']}: {day['mintempC']}° to {day['maxtempC']}°, {desc}\")
+        lo = day['mintempF'] if imperial else day['mintempC']
+        hi = day['maxtempF'] if imperial else day['maxtempC']
+        out.append(f\"  {day['date']}: {lo}{deg} to {hi}{deg}, {desc}\")
     print('\n'.join(out))
 except Exception as e:
     print(f'PARSE_ERROR: {e}', file=sys.stderr)
