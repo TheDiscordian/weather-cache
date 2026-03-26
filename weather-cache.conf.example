@@ -15,8 +15,13 @@ LOCATION_NAME="Toronto Ontario"
 # CACHE_DIR="$HOME/.cache/weather"
 
 # Optional: Environment Canada alerts bounding box (lon_min,lat_min,lon_max,lat_max)
-# Only needed if you want weather alerts. Find your bounding box at:
-# https://api.weather.gc.ca/collections/weather-alerts/items?lang=en&limit=1
+# Only needed if you want weather alerts (Canada only).
+# To create a bounding box, take your coordinates and offset by ~0.2-0.3 degrees:
+#   lon_min = LONGITUDE - 0.2
+#   lat_min = LATITUDE  - 0.15
+#   lon_max = LONGITUDE + 0.2
+#   lat_max = LATITUDE  + 0.15
+# Example for Toronto (43.65, -79.38): "-79.6,43.5,-79.2,43.8"
 # ALERT_BBOX="-79.6,43.5,-79.2,43.8"
 
 # Optional: filter alerts by area name (defaults to LOCATION_NAME)
