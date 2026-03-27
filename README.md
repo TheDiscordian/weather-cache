@@ -35,6 +35,10 @@ $EDITOR ~/.config/weather-cache/weather-cache.conf
 cp weather-cache.service weather-cache.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now weather-cache.timer
+
+# Optional: install Claude Code /weather skill globally
+mkdir -p ~/.claude/skills/weather
+cp .claude/skills/weather/SKILL.md ~/.claude/skills/weather/SKILL.md
 ```
 
 ## Configuration
@@ -70,16 +74,7 @@ The widget shows an emoji + temperature (e.g. `☀️ 22°C`) with a detailed to
 
 ## Claude Code integration
 
-This repo includes a `/weather` [skill](https://docs.anthropic.com/en/docs/claude-code/skills) for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). When working in a project that uses weather-cache, Claude can answer weather questions using your cached data.
-
-To make the skill available in all projects, copy it to your personal skills directory:
-
-```bash
-mkdir -p ~/.claude/skills/weather
-cp .claude/skills/weather/SKILL.md ~/.claude/skills/weather/SKILL.md
-```
-
-Then use `/weather` in any Claude Code conversation to check current conditions, forecasts, and alerts.
+This repo includes a `/weather` [skill](https://docs.anthropic.com/en/docs/claude-code/skills) for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). When working in a project that uses weather-cache, Claude can answer weather questions using your cached data. The skill is available automatically when working in this repo. To make it available globally, see the optional step in the install block above.
 
 ## Cache format
 
