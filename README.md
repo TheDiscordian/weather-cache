@@ -72,10 +72,6 @@ Add a custom module to your Waybar config:
 
 The widget shows an emoji + temperature (e.g. `☀️ 22°C`) with a detailed tooltip on hover including feels-like, wind, humidity, forecast, and any active alerts.
 
-## Claude Code integration
-
-This repo includes a `/weather` [skill](https://docs.anthropic.com/en/docs/claude-code/skills) for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). When working in a project that uses weather-cache, Claude can answer weather questions using your cached data. The skill is available automatically when working in this repo. To make it available globally, see the optional step in the install block above.
-
 ## Cache format
 
 Weather data is cached as plain text in `~/.cache/weather/`:
