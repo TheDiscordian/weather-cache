@@ -141,7 +141,7 @@ fi
 
 # Weather alerts (Environment Canada — optional, only if ALERT_BBOX is set)
 if [ -n "$ALERT_BBOX" ]; then
-    ALERT_FILTER="${ALERT_FILTER:-$LOCATION_NAME}"
+    export ALERT_FILTER="${ALERT_FILTER:-$LOCATION_NAME}"
     RAW_ALERTS=$(curl -sf --max-time 120 "https://api.weather.gc.ca/collections/weather-alerts/items?lang=en&limit=10&bbox=${ALERT_BBOX}" 2>/dev/null)
     if [ -n "$RAW_ALERTS" ]; then
         PARSED=$(echo "$RAW_ALERTS" | python3 -c "
